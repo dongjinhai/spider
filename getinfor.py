@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
-from spider.myAlign import myAlign
+# from spider.myAlign import myAlign
 def getsource(url):
     xq = input('请输入学期：格式xxxx-xxxx-x:')
     params = {

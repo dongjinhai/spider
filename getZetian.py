@@ -20,11 +20,12 @@ def getContent(all_list):
     reg = re.compile(r'[/\:*?<>"|]+')
     time_count = 0
     for i in all_list:
-        #防止爬太快而被主机拒绝
+        #如果爬太快而被主机拒绝就启用这段代码
         if time_count >= 50:
             time.sleep(1)
             time_count=0
         time_count += 1
+
         url = 'http://www.biquku.com/3/3226/'+i[1]
         retu = requests.get(url)
         soup = BeautifulSoup(retu.content.decode('gbk',errors='ignore'),'lxml')
