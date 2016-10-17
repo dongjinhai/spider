@@ -4,6 +4,7 @@ from selenium import webdriver
 import re
 import pymysql.cursors
 import time
+import datetime
 '''
 分析贴吧发帖
 - 记录贴吧的新帖增长速率
@@ -17,6 +18,13 @@ import time
 def getTimeNow():
     timeFormat = '%Y-%m-%d %X'
     return time.strftime(timeFormat,time.localtime())
+
+# 将时间转化成datetime类型
+def strTodatetime1(str):
+    return datetime.datetime.strptime(str,'%Y-%m-%d %H:%M:%S')
+
+def strTodatetime2(str):
+    return datetime.datetime.strptime(str,'%Y-%m-%d %H:%M')
 
 # 连接mysql数据库，返回一个数据库连接对象
 def getMySqlCon():
@@ -62,7 +70,7 @@ def savMennumAndInfornum(url):
         con.close()
     return inforList
 
-# 得到首页上帖子信息，包括帖子主题，发布时间，帖子得到第一个的回复时间。
+# 得到首页上帖子信息，包括帖子url，发布时间，帖子得到第一个的回复时间。
 def getInfo_tiezi(url):
     html = gethtml(url)
     soup = getSoup(html)
@@ -89,7 +97,7 @@ def getInfo_tiezi(url):
     try:
         for i in info_tiezi_list:
             value = " values('{0}','{1}','{2}');".format(i[0],i[1],i[2])
-            insert_sql = "insert into tiezi(tiezi_url,tiezi_fitime,tiezi_setime)"+value
+            insert_sql = "insert into tiezi(tiezi_url,tiezi_setime,tiezi_fitime)"+value
             with con.cursor() as cur:
                 cur.execute(insert_sql)
                 con.commit()
@@ -97,6 +105,85 @@ def getInfo_tiezi(url):
     finally:
         con.close()
     return info_tiezi_list
+
+# 分析贴吧每个时段关注人数和帖子增长率
+def analNumfortieba():
+    result_dict =[]
+    #得到数据库数据
+    con = getMySqlCon()
+    try:
+        with con.cursor() as cur:
+            select_sql = "select DISTINCT * from tieba where tieba_name = 'bilibili吧_百度贴吧';"
+            cur.execute(select_sql)
+            result_set = cur.fetchall()
+    finally:
+        cur.close()
+        con.close()
+    #处理数据
+    for i in range(len(result_set)-1):
+        temp_dict = {}
+        start = strTodatetime1(result_set[i]['time'])
+        end = strTodatetime1(result_set[i+1]['time'])
+        time = start+(end - start)/2
+        temp_dict['time'] = time
+        menNum = int("".join(result_set[i]['card_menNum'].split(',')))-int("".join(result_set[i+1]['card_menNum'].split(',')))
+        infoNum = int("".join(result_set[i]['card_infoNum'].split(',')))-int("".join(result_set[i+1]['card_infoNum'].split(',')))
+        temp_dict['card_menNumRate'] = menNum/(end-start).seconds
+        temp_dict['card_infoNumRate'] = infoNum/(end-start).seconds
+        result_dict.append(temp_dict)
+    #显示数据
+    for i in result_dict:
+        print('时段：{0}帖子增长率：{1}人数增长率：{2}'.format(i['time'],i['card_infoNumRate'],i['card_menNumRate']))
+    return result_dict
+
+# 分析帖子第一个回复时间区间图
+def analFirstreply():
+    #得到数据库数据
+    con = getMySqlCon()
+    try:
+        with con.cursor() as cur:
+            select_sql = "select DISTINCT tiezi_url,tiezi_setime,tiezi_fitime from tiezi;"
+            cur.execute(select_sql)
+            result_set = cur.fetchall()
+    finally:
+        cur.close()
+        con.close()
+    #处理数据
+    temp = 1
+    # 在一分钟之内回复数
+    leastOnemin = 0
+    # 在1-3分钟之内回复数
+    betweenOneandThree = 0
+    # 在3-5分钟之内回复数
+    betweenThreeandFive = 0
+    # 在5分钟以上回复数
+    aboveFive = 0
+    # 未得到回复的帖子数
+    noneReply = 0
+    for i in result_set:
+        # print(temp,end=' ')
+        if i['tiezi_fitime'] == '':
+            noneReply += 1
+        else:
+            setime = strTodatetime2(i['tiezi_setime'])
+            fitime = strTodatetime2(i['tiezi_fitime'])
+            flag = (fitime-setime).seconds
+            if flag < 60:
+                leastOnemin += 1
+            elif flag>=60 and flag<180:
+                betweenOneandThree += 1
+            elif flag>=180 and flag<300:
+                betweenThreeandFive += 1
+            else:
+                aboveFive += 1
+    print('在一分钟之内回复数:{0}'.format(leastOnemin))
+    print('在1-3分钟之内回复数:{0}'.format(betweenOneandThree))
+    print('在3-5分钟之内回复数:{0}'.format(betweenThreeandFive))
+    print('在5分钟以上回复数:{0}'.format(aboveFive))
+    print('未得到回复的帖子数:{0}'.format(noneReply))
+
+
+
 
 
 url='http://tieba.baidu.com/f?kw=bilibili&fr=index&fp=0&ie=utf-8'
@@ -106,8 +193,12 @@ while True:
     print(re_list)
     time.sleep(20)
 '''
+getInfo_tiezi(url)
+analFirstreply()
+'''
 for i in getInfo_tiezi(url):
     print(i)
+'''
 # html = gethtml(url)
 # soup = getSoup(html)
 # print('关注数:'+soup.find_all('span',attrs={'class':'card_menNum'})[0].text)
